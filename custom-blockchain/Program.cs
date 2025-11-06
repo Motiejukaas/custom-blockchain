@@ -12,7 +12,7 @@ class Program
     static void Main(string[] args)
     {
         // === Genesis setup ===
-        var users = GenerateUsers(5);
+        var users = GenerateUsers(1000);
         var pool = new TransactionPool();
         var utxoSet = new UtxoSet();
         int difficulty = 1;
@@ -28,7 +28,7 @@ class Program
         var miner = new Miner();
 
         // === Generate and add transactions ===
-        var txs = GenerateTransactions(users, 200);
+        var txs = GenerateTransactions(users, 10000, utxoSet);
         foreach (var tx in txs)
             pool.Add(tx);
 
@@ -57,7 +57,7 @@ class Program
             double hashRate = hashesTried / seconds;
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"✔ Block #{blockIndex} mined successfully!");
+            Console.WriteLine($"Block #{blockIndex} mined successfully!");
             Console.ResetColor();
             Console.WriteLine($"Block Hash: {block.BlockHash}");
             Console.WriteLine($"Nonce used: {block.Header.Nonce}");
@@ -79,6 +79,28 @@ class Program
         }
 
         Console.WriteLine("\nMining complete.");
+        
+        // === Interactive block lookup ===
+        while (true)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\n=== Block Lookup ===");
+            Console.ResetColor();
+            Console.WriteLine("Enter a block index or hash (Enter to exit):");
+
+            string? query = Console.ReadLine();
+            if (string.IsNullOrWhiteSpace(query))
+                break;
+
+            var block = int.TryParse(query, out int idx)
+                ? chain.FindBlockByIndex(idx)
+                : chain.FindBlockByHash(query);
+
+            if (block != null)
+                chain.PrintBlockInfo(block);
+            else
+                Console.WriteLine("Block not found.");
+        }
     }
 
     // === Helper functions ===
@@ -87,14 +109,15 @@ class Program
         var rnd = new Random();
         var users = new List<UserAccount>();
         for (int i = 0; i < count; i++)
-            users.Add(new UserAccount($"User_{i:D4}", rnd.Next(100, 1000)));
+            users.Add(new UserAccount($"User_{i:D4}", rnd.Next(100, 1000000)));
         return users;
     }
 
-    static List<Transaction.Transaction> GenerateTransactions(List<UserAccount> users, int count)
+    static List<Transaction.Transaction> GenerateTransactions(List<UserAccount> users, int count, UtxoSet utxoSet)
     {
         var rnd = new Random();
         var txs = new List<Transaction.Transaction>();
+
         for (int i = 0; i < count; i++)
         {
             var sender = users[rnd.Next(users.Count)];
@@ -102,11 +125,45 @@ class Program
             if (receiver.PublicKey == sender.PublicKey) continue;
 
             var amount = rnd.Next(1, 50);
-            var inputs = new List<TransactionInput> { new("genesis", rnd.Next(users.Count)) };
-            var outputs = new List<TransactionOutput> { new(receiver.PublicKey, amount) };
+            var tx = CreateTransaction(sender, receiver, amount, utxoSet);
+            if (tx == null) continue;
 
-            txs.Add(new Transaction.Transaction(inputs, outputs));
+            txs.Add(tx);
+
+            // Update UTXO set immediately
+            // Remove spent inputs
+            foreach (var input in tx.Inputs)
+                utxoSet.Remove(input.PreviousTxId, input.OutputIndex);
+
+            // Add new outputs (spendable by receiver)
+            for (int j = 0; j < tx.Outputs.Count; j++)
+                utxoSet.Add(tx.Id, j, tx.Outputs[j]);
         }
+
         return txs;
     }
+
+    
+    static Transaction.Transaction CreateTransaction(UserAccount sender, UserAccount receiver, decimal amount, UtxoSet utxoSet)
+    {
+        // Find sender's UTXOs
+        var available = utxoSet
+            .GetAll()
+            .Where(kv => kv.Value.ReceiverPublicKey == sender.PublicKey)
+            .ToList();
+
+        if (available.Count == 0)
+            return null; // no funds
+
+        var inputUtxo = available[new Random().Next(available.Count)];
+        var parts = inputUtxo.Key.Split(':');
+        string prevTxId = parts[0];
+        int outputIndex = int.Parse(parts[1]);
+
+        var inputs = new List<TransactionInput> { new(prevTxId, outputIndex) };
+        var outputs = new List<TransactionOutput> { new(receiver.PublicKey, amount) };
+
+        return new Transaction.Transaction(inputs, outputs);
+    }
+
 }

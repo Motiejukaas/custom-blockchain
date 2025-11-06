@@ -22,7 +22,7 @@ public class BlockHeader : IHashable
 
     public byte[] GetBytes()
     {
-        var input = $"{PrevBlockHash}{Timestamp.ToBinary()}{Version}{MerkleRootHash}{Nonce}{Difficulty}";
+        var input = $"{Nonce}{PrevBlockHash}{Timestamp.ToBinary()}{Version}{MerkleRootHash}{Difficulty}";
         return Encoding.UTF8.GetBytes(input);
     }
 }

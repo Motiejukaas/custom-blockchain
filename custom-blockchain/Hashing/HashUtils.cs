@@ -5,7 +5,7 @@ namespace custom_blockchain.Hashing;
 public static class HashUtils
 {
     private static readonly CustomHash Hasher = new();
-
+    
     public static byte[] ComputeHash(byte[] input) => Hasher.ComputeHash(input);
     
     public static string ComputeHashHex(byte[] input) =>

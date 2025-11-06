@@ -22,4 +22,10 @@ public class UtxoSet
         => _utxos.Values
             .Where(o => o.ReceiverPublicKey == publicKey)
             .Sum(o => o.Amount);
+    
+    public Dictionary<string, TransactionOutput> GetAll()
+    {
+        return _utxos;
+    }
+
 }
